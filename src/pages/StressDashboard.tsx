@@ -69,7 +69,14 @@ const StressDashboard: React.FC = () => {
   const [realtimeChannel, setRealtimeChannel] = useState<any>(null);
 
   useEffect(() => {
-    if (!user || !receiving) return;
+    if (!user || !receiving) {
+      // Clean up if receiving is turned off
+      if (realtimeChannel) {
+        supabase.removeChannel(realtimeChannel);
+        setRealtimeChannel(null);
+      }
+      return;
+    }
 
     const displayName = user.full_name || user.email?.split('@')[0] || 'User';
     setUserName(displayName);
@@ -355,6 +362,23 @@ const StressDashboard: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <Button
+                onClick={() => setReceiving(!receiving)}
+                variant={receiving ? "destructive" : "default"}
+                className={receiving ? "" : "bg-green-600 hover:bg-green-700 text-white"}
+              >
+                {receiving ? (
+                  <>
+                    <Activity className="w-4 h-4 mr-2 animate-pulse" />
+                    Stop Fetching
+                  </>
+                ) : (
+                  <>
+                    <Wifi className="w-4 h-4 mr-2" />
+                    Start Fetching Data
+                  </>
+                )}
+              </Button>
               <Badge variant={isConnected ? "default" : "secondary"} className={`${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}>
                 {isConnected ? <Wifi className="w-3 h-3 mr-1" /> : <WifiOff className="w-3 h-3 mr-1" />}
                 {isConnected ? 'Live' : 'Offline'}
