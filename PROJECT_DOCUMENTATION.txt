@@ -1,0 +1,236 @@
+# Stress Sense Guardian AI — Complete Project Documentation
+
+---
+
+## Table of Contents
+1. Overview
+2. System Architecture
+3. Features
+4. Models & Algorithms
+5. ESP32 Integration
+6. Supabase Backend
+7. Frontend (React/Vite)
+8. Voice Stress Detection
+9. Facial Expression Analysis
+10. Wearable Sensor Fusion
+11. Real-time Dashboard (WebSocket)
+12. Database Schema
+13. API Endpoints
+14. User Authentication
+15. Error Handling
+16. Deployment & DevOps
+17. Future Improvements
+18. References
+
+---
+
+## 1. Overview
+Stress Sense Guardian AI is a full-stack platform for real-time stress detection using multimodal signals: voice, facial expressions, and wearable sensors. It combines browser-based AI, ESP32 hardware, and Supabase cloud backend for live monitoring, analytics, and personalized recommendations.
+
+---
+
+## 2. System Architecture
+
+- **ESP32**: Collects heart rate, temperature, GSR, and sends data via HTTP POST to Supabase Edge Functions.
+- **Supabase**: Handles authentication, database, edge functions, and real-time WebSocket updates.
+- **Frontend (React/Vite)**: Provides dashboard, visualizations, and AI-powered stress analysis.
+- **AI Models**: Browser-based facial and voice stress detection, plus sensor fusion.
+
+### Diagram
+
+```
+ESP32 ──HTTP POST──▶ Supabase Edge Function ──▶ Database
+                                      │
+                                      ▼
+                        Dashboard (WebSocket Realtime)
+```
+
+---
+
+## 3. Features
+- Real-time stress monitoring (live updates)
+- Multimodal fusion: voice, face, wearable
+- AI-powered facial expression analysis
+- Voice stress detection (browser mic)
+- ESP32 sensor integration
+- User authentication & health records
+- Historical data analytics
+- Personalized recommendations
+- Error handling & status indicators
+- Responsive UI (mobile/desktop)
+
+---
+
+## 4. Models & Algorithms
+
+### Facial Expression Analysis
+- Uses `face-api.js` (browser ML)
+- Detects emotions: happy, sad, angry, surprised, neutral, fearful, disgusted
+- Maps emotions to stress levels
+
+### Voice Stress Detection
+- Uses browser mic + custom feature extraction
+- RMS (loudness), ZCR (tension), voiced ratio
+- Heuristic rules (not ML):
+  - High RMS + ZCR → stressed
+  - Low RMS + ZCR → calm
+  - Others → neutral, anxious, excited
+
+### Wearable Sensor Fusion
+- Heart rate, temperature, GSR
+- Custom stress score calculation
+- Fusion algorithm combines face, speech, wearable
+
+---
+
+## 5. ESP32 Integration
+- Hardware: ESP32, PPG sensor (A0), DS18B20 (D2), GSR (A1)
+- Firmware: Arduino code posts JSON to Supabase Edge Function
+- Example POST:
+```
+{
+  "user_id": "...",
+  "heart_rate": 75,
+  "temperature": 36.5,
+  "gsr_value": 450,
+  "timestamp": "2024-01-01T12:00:00Z"
+}
+```
+- Posts every 2–5 seconds for live updates
+
+---
+
+## 6. Supabase Backend
+- Edge Functions: receive-sensor-data, speech-stress-proxy, etc.
+- Database: biometric_data_enhanced, health_records, facial_analysis
+- Realtime: WebSocket push to dashboard
+- Authentication: JWT, user_id
+
+---
+
+## 7. Frontend (React/Vite)
+- Components: CameraModule, SpeechStressDetector, CombinedStressResult, HealthRecordsPage, etc.
+- Dashboard: live stress score, vital signs, fusion analysis
+- UI: Tailwind, Lucide icons, responsive cards
+- WebSocket: Supabase Realtime subscription
+
+---
+
+## 8. Voice Stress Detection
+- Component: SpeechStressDetector.tsx
+- Uses MediaRecorder API for browser mic
+- Feature extraction: RMS, ZCR, voiced ratio
+- Heuristic classification (no ML model)
+- 10s recording, real-time feedback
+
+---
+
+## 9. Facial Expression Analysis
+- Component: CameraModule.tsx
+- Uses face-api.js (browser ML)
+- Loads models from /public/models
+- Detects dominant emotion every 2s
+- Maps emotion to stress level
+
+---
+
+## 10. Wearable Sensor Fusion
+- ESP32 posts sensor data
+- Supabase Edge Function calculates stress score
+- Fusion algorithm combines:
+  - 40% facial
+  - 40% speech
+  - 20% wearable
+- Dashboard displays all scores
+
+---
+
+## 11. Real-time Dashboard (WebSocket)
+- Uses Supabase Realtime (WebSocket)
+- Toggle button: Start/Stop Receiving
+- Subscribes to biometric_data_enhanced for user_id
+- Updates instantly on new data
+
+---
+
+## 12. Database Schema
+### biometric_data_enhanced
+- id (UUID)
+- user_id (UUID)
+- heart_rate (int)
+- temperature (float)
+- gsr_value (float)
+- raw_ecg_signal (float)
+- stress_score (int)
+- stress_level (string)
+- timestamp (datetime)
+- created_at (datetime)
+- facial_emotion (string)
+- wearable_stress_score (int)
+- fusion_stress_score (int)
+
+### health_records
+- id (UUID)
+- user_id (UUID)
+- condition (string)
+- diagnosis_date (date)
+- severity (string)
+- status (string)
+- symptoms (array)
+- medications (array)
+- notes (string)
+- created_at (datetime)
+
+---
+
+## 13. API Endpoints
+- `/functions/v1/receive-sensor-data` (POST)
+- `/functions/v1/speech-stress-proxy` (POST)
+- `/functions/v1/facial-stress-proxy` (POST)
+- `/auth/v1` (Supabase auth)
+
+---
+
+## 14. User Authentication
+- Supabase JWT
+- Context: AuthContext.tsx
+- User ID passed from frontend and ESP32
+
+---
+
+## 15. Error Handling
+- Toast notifications (use-toast)
+- Status badges (Live/Offline)
+- Try/catch in edge functions and frontend
+
+---
+
+## 16. Deployment & DevOps
+- Vite for frontend
+- Supabase CLI for functions
+- Docker (optional)
+- Vercel/Netlify for hosting
+
+---
+
+## 17. Future Improvements
+- ML-based voice stress detection (HuggingFace)
+- More sensor types (SpO2, HRV)
+- Mobile app
+- Advanced analytics
+- Custom user recommendations
+
+---
+
+## 18. References
+- Supabase docs
+- face-api.js docs
+- Arduino ESP32 docs
+- Vite docs
+- HuggingFace docs
+
+---
+
+This file covers all major features, models, and architecture. For detailed code walkthroughs, see the source files in `/src/components`, `/supabase/functions`, and `/public/models`.
+
+For questions or contributions, contact the project maintainer.
