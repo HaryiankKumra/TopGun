@@ -10,7 +10,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Fallback to direct API calls if Edge Functions are unavailable
 const FACIAL_STRESS_API = import.meta.env.VITE_FACIAL_STRESS_API || "https://haryiank-facial-stress.hf.space";
-const WEARABLE_STRESS_API = import.meta.env.VITE_WEARABLE_STRESS_API || "https://mrinal007-wesad.hf.space";
+// Updated to use your Hugging Face Space: Haryiank/stress-detector
+const WEARABLE_STRESS_API = import.meta.env.VITE_WEARABLE_STRESS_API || "https://Haryiank-stress-detector.hf.space";
 
 // Use Edge Functions for better reliability (bypasses CORS, handles retries)
 const USE_EDGE_FUNCTIONS = true;
