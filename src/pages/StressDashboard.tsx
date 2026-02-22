@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import CameraModule from "@/components/CameraModule";
 import SpeechStressDetector from "@/components/SpeechStressDetector";
+import { analyzeWearableStress } from "@/services/huggingface";
 
 interface BiometricData {
   id: string;
@@ -40,11 +41,16 @@ interface BiometricData {
   stress_score: number;
   timestamp: string;
   created_at: string;
+  facial_emotion?: string;
+  facial_confidence?: number;
+  wearable_stress_score?: number;
+  fusion_stress_score?: number;
 }
 
 const StressDashboard: React.FC = () => {
   const { user } = useAuth();
   const isMobile = useIsMobile();
+  const POLL_INTERVAL_MS = 5000;
   
   const [currentData, setCurrentData] = useState<BiometricData | null>(null);
   const [userName, setUserName] = useState<string>("");
@@ -67,6 +73,7 @@ const StressDashboard: React.FC = () => {
   });
   const [receiving, setReceiving] = useState(false);
   const [realtimeChannel, setRealtimeChannel] = useState<any>(null);
+  const lastWearableSampleAtRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user || !receiving) {
@@ -82,6 +89,14 @@ const StressDashboard: React.FC = () => {
     setUserName(displayName);
     fetchLatestData();
     fetchDailyStats();
+    refreshWearablePrediction();
+
+    // Fallback polling to match Analytics page behavior (even if realtime fails)
+    const interval = setInterval(() => {
+      fetchLatestData();
+      fetchDailyStats();
+      refreshWearablePrediction();
+    }, POLL_INTERVAL_MS);
 
     // ── Supabase Realtime WebSocket subscription ──────────────────────────
     const channel = supabase
@@ -101,6 +116,7 @@ const StressDashboard: React.FC = () => {
           setLastUpdate(new Date(data.created_at));
           setIsConnected(true);
           if (data.stress_score) setOverallStress(data.stress_score);
+          refreshWearablePrediction();
         }
       )
       .subscribe((status) => {
@@ -115,6 +131,7 @@ const StressDashboard: React.FC = () => {
     return () => {
       supabase.removeChannel(channel);
       setRealtimeChannel(null);
+      clearInterval(interval);
     };
   }, [user, receiving]);
 
@@ -163,6 +180,9 @@ const StressDashboard: React.FC = () => {
         setCurrentData(data as BiometricData);
         setLastUpdate(new Date(data.created_at));
         if (data.stress_score) setOverallStress(data.stress_score);
+        if (typeof data.wearable_stress_score === "number") {
+          setWearableStress(data.wearable_stress_score);
+        }
       } else {
         setIsConnected(false);
       }
@@ -172,15 +192,51 @@ const StressDashboard: React.FC = () => {
     }
   };
 
+  const refreshWearablePrediction = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await (supabase as any)
+        .from("biometric_data_enhanced")
+        .select("id, raw_ecg_signal, gsr_value, temperature, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      if (!data || data.length < 20) return;
+
+      const newestAt = data[0]?.created_at || null;
+      if (newestAt && newestAt === lastWearableSampleAtRef.current) return;
+
+      const sensorData = data
+        .slice()
+        .reverse()
+        .map((d: any) => ({
+          raw_ecg_signal: Number(d.raw_ecg_signal ?? 0),
+          gsr_value: Number(d.gsr_value ?? 0),
+          temperature: Number(d.temperature ?? 0),
+        }));
+
+      const predictionResult = await analyzeWearableStress(sensorData);
+      const isStressed = predictionResult.prediction === 1;
+      const stressValue = isStressed ? 75 : 25;
+
+      setWearableStress(stressValue);
+      setWearableResult(predictionResult.stress_level || (isStressed ? "Stressed" : "Not Stressed"));
+      lastWearableSampleAtRef.current = newestAt;
+    } catch (error) {
+      console.error("Wearable prediction error:", error);
+    }
+  };
+
   const handleEmotionDetected = async (emotion: string, confidence: number) => {
     setFacialEmotion(emotion);
     setFacialConfidence(confidence);
     
-    // Update fusion stress
     const facialStress = getEmotionStressScore(emotion);
-    const newFusion = Math.round((facialStress * 0.4) + (wearableStress * 0.6));
-    setFusionStress(newFusion);
-    
+    const newFusion = Math.round((facialStress * 0.4) + (speechStressScore * 0.3) + (wearableStress * 0.3));
+
     if (user) {
       try {
         const stressScore = getEmotionStressScore(emotion);
@@ -247,9 +303,8 @@ const StressDashboard: React.FC = () => {
       
       // Update fusion stress
       const facialStress = getEmotionStressScore(facialEmotion);
-      const newFusion = Math.round((facialStress * 0.4) + (stressValue * 0.6));
-      setFusionStress(newFusion);
-      
+      const newFusion = Math.round((facialStress * 0.4) + (speechStressScore * 0.3) + (stressValue * 0.3));
+
       // Calculate overall stress score
       const stressScore = Math.round((stressValue + facialStress) / 2);
       
@@ -317,6 +372,12 @@ const StressDashboard: React.FC = () => {
     };
     return map[emotion] || 30;
   };
+
+  useEffect(() => {
+    const facialStress = getEmotionStressScore(facialEmotion);
+    const newFusion = Math.round((facialStress * 0.4) + (speechStressScore * 0.3) + (wearableStress * 0.3));
+    setFusionStress(newFusion);
+  }, [facialEmotion, speechStressScore, wearableStress]);
 
   const getStressColor = (score: number) => {
     if (score < 30) return "text-green-500";
@@ -583,7 +644,7 @@ const StressDashboard: React.FC = () => {
                     </div>
                     <Progress value={fusionStress} className="h-3" />
                     <p className="text-xs text-gray-400 mt-1 text-center">
-                      40% facial + 60% wearable
+                      40% facial + 30% speech + 30% wearable
                     </p>
                   </div>
                 </div>
